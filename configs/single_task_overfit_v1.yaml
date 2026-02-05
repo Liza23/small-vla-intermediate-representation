@@ -1,4 +1,5 @@
-# Configuration for single task overfitting on LIBERO-Spatial
+# Configuration for VLA v1.1 - Future Prediction
+# Single task overfitting on LIBERO-Spatial
 # Optimized for 2x Ada 6000 GPUs (50GB each, 100GB total)
 
 # Model configuration
@@ -12,6 +13,11 @@ model:
   clip_model_name: "openai/clip-vit-base-patch16"
   freeze_vision: true  # Freeze CLIP vision encoder
   freeze_text: true  # Freeze CLIP text encoder
+
+  # NEW in v1.1: Future prediction components
+  future_hidden_dim: 1024  # Future predictor hidden dimension
+  future_num_layers: 3  # Number of future predictor layers
+  decoder_output_size: 64  # Decoder output image size (64x64)
 
 # Data configuration
 data:
@@ -34,8 +40,9 @@ training:
 
   # Logging and saving
   log_interval: 10  # Log every N batches
+  vis_interval: 100  # Visualize future predictions every N batches (NEW in v1)
   save_interval: 100  # Save checkpoint every N epochs
-  output_dir: "./data/user_data/ldahiya/outputs/"
+  output_dir: "./data/user_data/ldahiya/outputs_v1/"
 
 # Inference configuration
 inference:
