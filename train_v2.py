@@ -87,6 +87,10 @@ def visualize_ee_pose_predictions(
     images_np = images_viz.cpu().numpy().transpose(0, 2, 3, 1)
     future_np = future_gt_viz.cpu().numpy().transpose(0, 2, 3, 1)
 
+    # Flip images vertically to correct orientation
+    images_np = np.flip(images_np, axis=1)
+    future_np = np.flip(future_np, axis=1)
+
     # Get EE poses
     pred_ee = predicted_ee_pose[:num_samples].cpu().numpy()  # [N, 7]
     target_ee = target_ee_pose[:num_samples].cpu().numpy()    # [N, 7]

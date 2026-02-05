@@ -94,16 +94,21 @@ def visualize_future_prediction(
     # Create visualization grid (current, GT future, predicted future)
     wandb_images = []
     for i in range(num_samples):
+        # Flip images vertically to correct orientation
+        current_img = np.flip(images_viz[i].cpu().numpy().transpose(1, 2, 0), axis=0)
+        gt_img = np.flip(future_gt_viz[i].cpu().numpy().transpose(1, 2, 0), axis=0)
+        pred_img = np.flip(decoded_viz_resized[i].cpu().numpy().transpose(1, 2, 0), axis=0)
+
         wandb_images.append(wandb.Image(
-            images_viz[i].cpu().numpy().transpose(1, 2, 0),
+            current_img,
             caption=f"Current (t)"
         ))
         wandb_images.append(wandb.Image(
-            future_gt_viz[i].cpu().numpy().transpose(1, 2, 0),
+            gt_img,
             caption=f"GT Future (t+1)"
         ))
         wandb_images.append(wandb.Image(
-            decoded_viz_resized[i].cpu().numpy().transpose(1, 2, 0),
+            pred_img,
             caption=f"Predicted Future (t+1)"
         ))
 

@@ -39,7 +39,7 @@ training:
 
   # Logging and saving
   log_interval: 10  # Log every N batches
-  vis_interval: 100  # Log EE pose predictions every N batches (NEW in v2)
+  vis_interval: 20  # Log EE pose predictions every N batches (NEW in v2)
   save_interval: 100  # Save checkpoint every N epochs
   output_dir: "/data/user_data/ldahiya/outputs_v2/"
 
