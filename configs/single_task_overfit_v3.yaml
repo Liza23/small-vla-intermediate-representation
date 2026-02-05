@@ -1,0 +1,59 @@
+# Configuration for VLA v3.0 - Future Image + Gripper Pose Prediction
+# Combines V1 (future image) + V2 (future EE pose)
+# Single task overfitting on LIBERO-Spatial
+# Optimized for 2x Ada 6000 GPUs (50GB each, 100GB total)
+
+# Model configuration
+model:
+  action_dim: 7  # LIBERO: 7-DOF actions
+  proprio_dim: 7  # Joint positions
+  ee_dim: 7  # End-effector pose (x, y, z, quat[3], gripper)
+  hidden_dim: 512  # Embedding dimension
+  flow_hidden_dim: 512  # Flow network hidden dimension
+  flow_num_layers: 4  # Number of flow network layers
+  clip_model_name: "openai/clip-vit-base-patch16"
+  freeze_vision: true  # Freeze CLIP vision encoder
+  freeze_text: true  # Freeze CLIP text encoder
+
+  # From V1: Future visual latent predictor + decoder
+  future_hidden_dim: 1024  # Future predictor hidden dimension
+  future_num_layers: 3  # Number of future predictor layers
+  decoder_output_size: 64  # Decoder output image size (64x64)
+
+  # From V2: Future EE pose predictor
+  pose_predictor_hidden_dim: 512  # Pose predictor hidden dimension
+  pose_predictor_num_layers: 3  # Number of pose predictor layers
+
+# Data configuration
+data:
+  data_path: "/home/ldahiya/max_vla/datasets"
+  task_name: "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate"  # First LIBERO-Spatial task
+  num_workers: 4
+  train_split: 1.0  # Use all data for overfitting (no validation split)
+  augmentation: false  # Can enable for more robust training
+
+# Training configuration
+training:
+  # Hardware
+  batch_size: 64  # Per GPU batch size (128 total with 2 GPUs)
+  num_epochs: 1000  # Overfit until perfect
+
+  # Optimization
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  min_lr: 0.000001
+
+  # NEW in V3: Loss weights (tunable)
+  future_loss_weight: 0.5  # Weight for future prediction losses (image + pose)
+  action_loss_weight: 1.0  # Weight for action prediction loss
+
+  # Logging and saving
+  log_interval: 10  # Log every N batches
+  vis_interval: 100  # Log future images + EE pose predictions every N batches
+  save_interval: 100  # Save checkpoint every N epochs
+  output_dir: "/data/user_data/ldahiya/outputs_v3/"
+
+# Inference configuration
+inference:
+  num_flow_steps: 50  # Number of sampling steps for rectified flow
+  batch_size: 1
