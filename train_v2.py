@@ -51,6 +51,75 @@ def cleanup_distributed():
         dist.destroy_process_group()
 
 
+def visualize_ee_pose_predictions(
+    images: torch.Tensor,
+    future_images_gt: torch.Tensor,
+    predicted_ee_pose: torch.Tensor,
+    target_ee_pose: torch.Tensor,
+    current_ee_pose: torch.Tensor,
+    step: int,
+    num_samples: int = 4,
+):
+    """
+    Create WandB visualization of current/future frames with EE pose predictions.
+
+    Args:
+        images: [B, 3, H, W] current images (normalized)
+        future_images_gt: [B, 3, H, W] GT next images (normalized)
+        predicted_ee_pose: [B, 7] predicted EE pose at t+1
+        target_ee_pose: [B, 7] GT EE pose at t+1
+        current_ee_pose: [B, 7] current EE pose at t
+        step: global step
+        num_samples: number of samples to visualize
+    """
+    # Denormalize images from CLIP stats
+    mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).view(1, 3, 1, 1).to(images.device)
+    std = torch.tensor([0.26862954, 0.26130258, 0.27577711]).view(1, 3, 1, 1).to(images.device)
+
+    images_viz = images[:num_samples] * std + mean
+    future_gt_viz = future_images_gt[:num_samples] * std + mean
+
+    # Clip to [0, 1]
+    images_viz = torch.clamp(images_viz, 0, 1)
+    future_gt_viz = torch.clamp(future_gt_viz, 0, 1)
+
+    # Convert to numpy for visualization (B, 3, H, W) -> (B, H, W, 3)
+    images_np = images_viz.cpu().numpy().transpose(0, 2, 3, 1)
+    future_np = future_gt_viz.cpu().numpy().transpose(0, 2, 3, 1)
+
+    # Get EE poses
+    pred_ee = predicted_ee_pose[:num_samples].cpu().numpy()  # [N, 7]
+    target_ee = target_ee_pose[:num_samples].cpu().numpy()    # [N, 7]
+    current_ee = current_ee_pose[:num_samples].cpu().numpy()  # [N, 7]
+
+    # Create visualization grid
+    wandb_images = []
+    for i in range(num_samples):
+        # Current image with current EE pose
+        wandb_images.append(wandb.Image(
+            images_np[i],
+            caption=f"Current (t) | EE: [{current_ee[i, 0]:.3f}, {current_ee[i, 1]:.3f}, {current_ee[i, 2]:.3f}]"
+        ))
+
+        # GT Future image with GT EE pose
+        wandb_images.append(wandb.Image(
+            future_np[i],
+            caption=f"GT Future (t+1) | EE: [{target_ee[i, 0]:.3f}, {target_ee[i, 1]:.3f}, {target_ee[i, 2]:.3f}]"
+        ))
+
+        # GT Future image with PREDICTED EE pose for comparison
+        error = np.linalg.norm(pred_ee[i, :3] - target_ee[i, :3])
+        wandb_images.append(wandb.Image(
+            future_np[i],
+            caption=f"Predicted EE (t+1) | [{pred_ee[i, 0]:.3f}, {pred_ee[i, 1]:.3f}, {pred_ee[i, 2]:.3f}] | Error: {error:.4f}"
+        ))
+
+    # Log images
+    wandb.log({
+        "ee_pose_visualization": wandb_images,
+    }, step=step)
+
+
 def log_ee_pose_predictions(
     predicted_ee_pose: torch.Tensor,
     target_ee_pose: torch.Tensor,
@@ -116,6 +185,7 @@ def train_epoch(
     for batch_idx, batch in enumerate(pbar):
         # Move to device
         images = batch['image'].to(device)
+        images_next = batch['image_next'].to(device)  # GT future images (for visualization)
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
         proprio = batch['proprio'].to(device)
@@ -178,16 +248,28 @@ def train_epoch(
 
             # Log EE pose predictions periodically
             if (batch_idx % vis_interval == 0) and (batch_idx > 0):
-                print(f"\n📊 Logging EE pose predictions at batch {batch_idx}, step {global_step}...")
+                print(f"\n📊 Logging EE pose predictions and visualizations at batch {batch_idx}, step {global_step}...")
                 try:
                     with torch.no_grad():
+                        # Log numerical EE pose metrics
                         log_ee_pose_predictions(
                             predicted_ee_pose=outputs['predicted_future_ee_pose'],
                             target_ee_pose=outputs['target_future_ee_pose'],
                             step=global_step,
                             num_samples=4,
                         )
-                    print(f"✓ EE pose logged to WandB")
+
+                        # Log image visualizations with EE pose overlays
+                        visualize_ee_pose_predictions(
+                            images=images,
+                            future_images_gt=images_next,
+                            predicted_ee_pose=outputs['predicted_future_ee_pose'],
+                            target_ee_pose=outputs['target_future_ee_pose'],
+                            current_ee_pose=ee_pose,
+                            step=global_step,
+                            num_samples=4,
+                        )
+                    print(f"✓ EE pose metrics and images logged to WandB")
                 except Exception as e:
                     print(f"✗ EE pose logging failed: {e}")
                     import traceback
@@ -226,6 +308,7 @@ def validate(
     for batch in pbar:
         # Move to device
         images = batch['image'].to(device)
+        images_next = batch['image_next'].to(device)  # GT future images (loaded but not used in validation)
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
         proprio = batch['proprio'].to(device)
