@@ -15,8 +15,8 @@ model:
 
 # Data configuration
 data:
-  data_path: "/path/to/libero/dataset"  # TODO: Update this path
-  task_name: "LIVING_ROOM_SCENE0_put_the_black_bowl_on_top_of_the_cabinet"  # Example task
+  data_path: "/tmp/dataset/libero/datasets"
+  task_name: "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate"  # First LIBERO-Spatial task
   num_workers: 4
   train_split: 1.0  # Use all data for overfitting (no validation split)
   augmentation: false  # Can enable for more robust training
@@ -28,13 +28,13 @@ training:
   num_epochs: 1000  # Overfit until perfect
 
   # Optimization
-  learning_rate: 3e-4
-  weight_decay: 1e-4
-  min_lr: 1e-6
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  min_lr: 0.000001
 
   # Logging and saving
   log_interval: 10  # Log every N batches
-  save_interval: 50  # Save checkpoint every N epochs
+  save_interval: 100  # Save checkpoint every N epochs
   output_dir: "./outputs"
 
 # Inference configuration

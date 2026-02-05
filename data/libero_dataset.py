@@ -63,76 +63,75 @@ class LIBERODataset(Dataset):
         # LIBERO dataset structure:
         # data/
         #   libero_spatial/
-        #     {task_name}/
-        #       demo_*.hdf5
+        #     {task_name}_demo.hdf5
 
-        task_dir = os.path.join(self.data_path, "libero_spatial", self.task_name)
+        # Find the demo file for this task
+        demo_file = os.path.join(self.data_path, "libero_spatial", f"{self.task_name}_demo.hdf5")
 
-        if not os.path.exists(task_dir):
-            raise ValueError(f"Task directory not found: {task_dir}")
+        if not os.path.exists(demo_file):
+            raise ValueError(f"Demo file not found: {demo_file}")
 
-        # Load all demo files
-        demo_files = sorted([f for f in os.listdir(task_dir) if f.startswith("demo_") and f.endswith(".hdf5")])
+        # Load all demos from the file
+        self._load_trajectory(demo_file)
 
-        if len(demo_files) == 0:
-            raise ValueError(f"No demo files found in {task_dir}")
-
-        for demo_file in demo_files:
-            demo_path = os.path.join(task_dir, demo_file)
-            traj_data = self._load_trajectory(demo_path)
-
-            if traj_data is not None:
-                self.trajectories.append(traj_data)
-
-    def _load_trajectory(self, hdf5_path: str) -> Optional[Dict]:
-        """Load a single trajectory from HDF5 file"""
+    def _load_trajectory(self, hdf5_path: str):
+        """Load all demonstrations from HDF5 file"""
         try:
             with h5py.File(hdf5_path, 'r') as f:
-                # Get demonstration data
-                demo = f['data']
+                # LIBERO structure: data/demo_0, data/demo_1, ...
+                data_group = f['data']
+                num_demos = len(data_group.keys())
 
-                # Extract observations
-                # LIBERO stores:
-                # - agentview_rgb: (T, H, W, 3)
-                # - robot0_joint_pos: (T, 7)
-                # - robot0_eef_pos: (T, 3)
-                # - robot0_eef_quat: (T, 4)
-                # - robot0_gripper_qpos: (T, 2)
+                print(f"Loading {num_demos} demonstrations from {os.path.basename(hdf5_path)}")
 
-                images = np.array(demo['obs']['agentview_rgb'])  # (T, H, W, 3)
-                joint_pos = np.array(demo['obs']['robot0_joint_pos'])  # (T, 7)
-                eef_pos = np.array(demo['obs']['robot0_eef_pos'])  # (T, 3)
-                eef_quat = np.array(demo['obs']['robot0_eef_quat'])  # (T, 4)
-                gripper_qpos = np.array(demo['obs']['robot0_gripper_qpos'])  # (T, 2)
+                # Extract task description from filename
+                self.task_description = self.task_name.replace('_', ' ')
 
-                # Actions
-                actions = np.array(demo['actions'])  # (T, 7)
+                # Load each demo
+                for demo_idx in range(num_demos):
+                    demo_key = f'demo_{demo_idx}'
+                    if demo_key not in data_group:
+                        continue
 
-                # Task description
-                if 'task_description' in demo.attrs:
-                    self.task_description = demo.attrs['task_description']
-                else:
-                    # Extract from task name
-                    self.task_description = self.task_name.split('_', 2)[-1].replace('_', ' ')
+                    demo = data_group[demo_key]
 
-                # Combine end-effector pose
-                ee_pose = np.concatenate([eef_pos, eef_quat], axis=-1)  # (T, 7)
+                    # Extract observations
+                    # LIBERO stores:
+                    # - agentview_rgb: (T, H, W, 3)
+                    # - joint_states: (T, 7)
+                    # - ee_states: (T, 6) - [pos(3), ori(3)]
+                    # - gripper_states: (T, 2)
 
-                # Store trajectory
-                traj = {
-                    'images': images,
-                    'proprio': joint_pos,
-                    'ee_pose': ee_pose,
-                    'actions': actions,
-                    'gripper': gripper_qpos,
-                    'length': len(images),
-                }
+                    images = np.array(demo['obs']['agentview_rgb'])  # (T, H, W, 3)
+                    joint_states = np.array(demo['obs']['joint_states'])  # (T, 7)
+                    ee_states = np.array(demo['obs']['ee_states'])  # (T, 6)
+                    gripper_states = np.array(demo['obs']['gripper_states'])  # (T, 2)
 
-                return traj
+                    # Actions
+                    actions = np.array(demo['actions'])  # (T, 7)
+
+                    # For ee_pose, we'll use ee_states (6D) and pad with a dummy value
+                    # to make it 7D for consistency with model expectations
+                    # Or we can adjust model to accept 6D
+                    # For now, let's pad with gripper state
+                    ee_pose = np.concatenate([ee_states, gripper_states[:, :1]], axis=-1)  # (T, 7)
+
+                    # Store trajectory
+                    traj = {
+                        'images': images,
+                        'proprio': joint_states,
+                        'ee_pose': ee_pose,
+                        'actions': actions,
+                        'gripper': gripper_states,
+                        'length': len(images),
+                    }
+
+                    self.trajectories.append(traj)
 
         except Exception as e:
             print(f"Error loading {hdf5_path}: {e}")
-            return None
+            import traceback
+            traceback.print_exc()
 
     def __len__(self) -> int:
         """Total number of timesteps across all trajectories"""

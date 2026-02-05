@@ -15,6 +15,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
+import wandb
 
 from models import VLAModel
 from data import create_dataloaders
@@ -115,6 +116,13 @@ def train_epoch(
                 writer.add_scalar('train/loss', loss.item(), global_step)
                 writer.add_scalar('train/lr', optimizer.param_groups[0]['lr'], global_step)
 
+                # Log to WandB
+                wandb.log({
+                    'batch_loss': loss.item(),
+                    'learning_rate': optimizer.param_groups[0]['lr'],
+                    'step': global_step,
+                })
+
             global_step += 1
 
     avg_loss = total_loss / num_batches
@@ -165,6 +173,9 @@ def validate(
         num_batches += 1
 
         pbar.set_postfix({'loss': loss.item()})
+
+    if num_batches == 0:
+        return float('inf')  # Return inf if no validation data
 
     avg_loss = total_loss / num_batches
     return avg_loss
@@ -329,6 +340,14 @@ def main():
     if rank == 0:
         writer = SummaryWriter(log_dir=os.path.join(output_dir, 'logs'))
 
+        # Initialize WandB
+        wandb.init(
+            project="babel-vla-mini-train",
+            name=f"{config['data']['task_name'][:50]}_{timestamp}",
+            config=config,
+            dir=output_dir,
+        )
+
     # Training loop
     if rank == 0:
         print("\n" + "="*50)
@@ -354,7 +373,7 @@ def main():
         )
 
         # Validate (only for single GPU or rank 0)
-        if val_loader is not None and rank == 0:
+        if val_loader is not None and rank == 0 and len(val_loader) > 0:
             val_loss = validate(
                 model=model,
                 val_loader=val_loader,
@@ -371,6 +390,14 @@ def main():
             if writer is not None:
                 writer.add_scalar('epoch/train_loss', train_loss, epoch)
                 writer.add_scalar('epoch/val_loss', val_loss, epoch)
+
+            # Log to WandB
+            wandb.log({
+                'epoch': epoch,
+                'train_loss': train_loss,
+                'val_loss': val_loss,
+                'lr': optimizer.param_groups[0]['lr'],
+            })
 
             # Save checkpoint
             is_best = val_loss < best_val_loss
@@ -394,8 +421,10 @@ def main():
         scheduler.step()
 
     # Cleanup
-    if rank == 0 and writer is not None:
-        writer.close()
+    if rank == 0:
+        if writer is not None:
+            writer.close()
+        wandb.finish()
 
     cleanup_distributed()
 

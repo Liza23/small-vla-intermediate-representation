@@ -59,3 +59,31 @@ Thumbs.db
 
 # TensorBoard
 events.out.tfevents.*
+
+# ---- data & outputs (NOPE) ----
+data/
+outputs/
+
+# ---- models / checkpoints ----
+models/**/*.pt
+models/**/*.pth
+models/**/*.ckpt
+models/**/*.safetensors
+
+# ---- eval artifacts ----
+*.log
+*.tmp
+
+# ---- python junk ----
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# ---- env / system ----
+.DS_Store
+.env
+.venv/
+
+# ---- DO NOT ignore ----
+!visualizations/
+!videos/
