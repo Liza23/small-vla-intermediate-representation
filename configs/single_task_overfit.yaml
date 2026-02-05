@@ -35,7 +35,7 @@ training:
   # Logging and saving
   log_interval: 10  # Log every N batches
   save_interval: 100  # Save checkpoint every N epochs
-  output_dir: "./outputs"
+  output_dir: "./data/user_data/ldahiya/outputs/"
 
 # Inference configuration
 inference:
