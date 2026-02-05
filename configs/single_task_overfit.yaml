@@ -1,0 +1,43 @@
+# Configuration for single task overfitting on LIBERO-Spatial
+# Optimized for 2x Ada 6000 GPUs (50GB each, 100GB total)
+
+# Model configuration
+model:
+  action_dim: 7  # LIBERO: 7-DOF actions
+  proprio_dim: 7  # Joint positions
+  ee_dim: 7  # End-effector pose (x, y, z, quat)
+  hidden_dim: 512  # Embedding dimension
+  flow_hidden_dim: 512  # Flow network hidden dimension
+  flow_num_layers: 4  # Number of flow network layers
+  clip_model_name: "openai/clip-vit-base-patch16"
+  freeze_vision: true  # Freeze CLIP vision encoder
+  freeze_text: true  # Freeze CLIP text encoder
+
+# Data configuration
+data:
+  data_path: "/path/to/libero/dataset"  # TODO: Update this path
+  task_name: "LIVING_ROOM_SCENE0_put_the_black_bowl_on_top_of_the_cabinet"  # Example task
+  num_workers: 4
+  train_split: 1.0  # Use all data for overfitting (no validation split)
+  augmentation: false  # Can enable for more robust training
+
+# Training configuration
+training:
+  # Hardware
+  batch_size: 64  # Per GPU batch size (128 total with 2 GPUs)
+  num_epochs: 1000  # Overfit until perfect
+
+  # Optimization
+  learning_rate: 3e-4
+  weight_decay: 1e-4
+  min_lr: 1e-6
+
+  # Logging and saving
+  log_interval: 10  # Log every N batches
+  save_interval: 50  # Save checkpoint every N epochs
+  output_dir: "./outputs"
+
+# Inference configuration
+inference:
+  num_flow_steps: 50  # Number of sampling steps for rectified flow
+  batch_size: 1

@@ -1,0 +1,40 @@
+name: vla-flow
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pytorch=2.1.0
+  - pytorch-cuda=12.1
+  - torchvision
+  - pip
+  - pip:
+    # Core ML libraries
+    - transformers==4.36.0
+    - accelerate==0.25.0
+    - einops==0.7.0
+
+    # Flow matching
+    - torchdiffeq==0.2.3
+
+    # Robotics and data
+    - h5py==3.10.0
+    - numpy<2.0
+    - opencv-python==4.9.0.80
+
+    # LIBERO dataset
+    - robosuite==1.4.1
+    - libero @ git+https://github.com/Lifelong-Robot-Learning/LIBERO.git
+
+    # Utilities
+    - wandb==0.16.2
+    - tqdm==4.66.1
+    - pyyaml==6.0.1
+    - matplotlib==3.8.2
+    - tensorboard==2.15.1
+
+    # Development
+    - ipython==8.19.0
