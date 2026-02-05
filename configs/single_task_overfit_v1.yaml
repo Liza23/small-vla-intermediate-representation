@@ -42,7 +42,7 @@ training:
   log_interval: 10  # Log every N batches
   vis_interval: 100  # Visualize future predictions every N batches (NEW in v1)
   save_interval: 100  # Save checkpoint every N epochs
-  output_dir: "./data/user_data/ldahiya/outputs_v1/"
+  output_dir: "/data/user_data/ldahiya/outputs_v1/"
 
 # Inference configuration
 inference:

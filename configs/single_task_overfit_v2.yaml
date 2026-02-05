@@ -1,17 +1,22 @@
-# Configuration for single task overfitting on LIBERO-Spatial
+# Configuration for VLA v2 - Future Gripper Pose Prediction
+# Single task overfitting on LIBERO-Spatial
 # Optimized for 2x Ada 6000 GPUs (50GB each, 100GB total)
 
 # Model configuration
 model:
   action_dim: 7  # LIBERO: 7-DOF actions
   proprio_dim: 7  # Joint positions
-  ee_dim: 7  # End-effector pose (x, y, z, quat)
+  ee_dim: 7  # End-effector pose (x, y, z, quat[3], gripper)
   hidden_dim: 512  # Embedding dimension
   flow_hidden_dim: 512  # Flow network hidden dimension
   flow_num_layers: 4  # Number of flow network layers
   clip_model_name: "openai/clip-vit-base-patch16"
   freeze_vision: true  # Freeze CLIP vision encoder
   freeze_text: true  # Freeze CLIP text encoder
+
+  # NEW in v2: Future EE pose predictor (simpler than v1!)
+  pose_predictor_hidden_dim: 512  # Pose predictor hidden dimension
+  pose_predictor_num_layers: 3  # Number of pose predictor layers
 
 # Data configuration
 data:
@@ -34,8 +39,9 @@ training:
 
   # Logging and saving
   log_interval: 10  # Log every N batches
+  vis_interval: 100  # Log EE pose predictions every N batches (NEW in v2)
   save_interval: 100  # Save checkpoint every N epochs
-  output_dir: "/data/user_data/ldahiya/outputs/"
+  output_dir: "/data/user_data/ldahiya/outputs_v2/"
 
 # Inference configuration
 inference:
