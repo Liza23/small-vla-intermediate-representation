@@ -30,7 +30,7 @@ data:
 training:
   # Hardware
   batch_size: 64  # Per GPU batch size (128 total with 2 GPUs)
-  num_epochs: 1000  # Overfit until perfect
+  num_epochs: 100000  # Overfit until perfect
 
   # Optimization
   learning_rate: 0.0003

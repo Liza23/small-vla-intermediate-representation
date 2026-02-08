@@ -49,8 +49,8 @@ training:
 
   # Logging and saving
   log_interval: 10  # Log every N batches
-  vis_interval: 100  # Log future images + EE pose predictions every N batches
-  save_interval: 100  # Save checkpoint every N epochs
+  vis_interval: 20  # Log future images + EE pose predictions every N batches
+  save_interval: 200  # Save checkpoint every N epochs
   output_dir: "/data/user_data/ldahiya/outputs_v3/"
 
 # Inference configuration

@@ -10,7 +10,7 @@ import numpy as np
 from tqdm import tqdm
 import os
 
-from models import VLAModel
+from models import VLAModelV2
 from libero.libero import benchmark, get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 
@@ -20,7 +20,7 @@ def load_model(checkpoint_path: str, config_path: str, device: str = 'cuda'):
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
-    model = VLAModel(
+    model = VLAModelV2(
         action_dim=config['model']['action_dim'],
         proprio_dim=config['model']['proprio_dim'],
         ee_dim=config['model']['ee_dim'],
@@ -30,6 +30,8 @@ def load_model(checkpoint_path: str, config_path: str, device: str = 'cuda'):
         clip_model_name=config['model']['clip_model_name'],
         freeze_vision=config['model']['freeze_vision'],
         freeze_text=config['model']['freeze_text'],
+        pose_predictor_hidden_dim=config['model']['pose_predictor_hidden_dim'],
+        pose_predictor_num_layers=config['model']['pose_predictor_num_layers'],
     )
 
     checkpoint = torch.load(checkpoint_path, map_location=device)

@@ -55,22 +55,39 @@ def visualize_future_prediction(
     images: torch.Tensor,
     future_images_gt: torch.Tensor,
     decoded_future: torch.Tensor,
+    predicted_ee_pose: torch.Tensor,
+    target_ee_pose: torch.Tensor,
+    current_ee_pose: torch.Tensor,
     step: int,
     num_samples: int = 4,
 ):
     """
-    Create WandB visualization of future prediction.
+    Create WandB visualization of future prediction with gripper poses.
 
     Args:
         images: [B, 3, H, W] current images (normalized)
         future_images_gt: [B, 3, H, W] GT next images (normalized)
         decoded_future: [B, 3, 64, 64] predicted next images (0-1 range)
+        predicted_ee_pose: [B, 7] predicted EE pose
+        target_ee_pose: [B, 7] target EE pose
+        current_ee_pose: [B, 7] current EE pose
         step: global step
         num_samples: number of samples to visualize
     """
+    # Ensure ALL tensors are on the same device (GPU)
+    device = images.device
+
+    # CRITICAL: Move ALL input tensors to device explicitly
+    images = images.to(device)
+    future_images_gt = future_images_gt.to(device)
+    decoded_future = decoded_future.to(device)
+    predicted_ee_pose = predicted_ee_pose.to(device)
+    target_ee_pose = target_ee_pose.to(device)
+    current_ee_pose = current_ee_pose.to(device)
+
     # Denormalize current and GT images
-    mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).view(1, 3, 1, 1).to(images.device)
-    std = torch.tensor([0.26862954, 0.26130258, 0.27577711]).view(1, 3, 1, 1).to(images.device)
+    mean = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=device).view(1, 3, 1, 1)
+    std = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=device).view(1, 3, 1, 1)
 
     images_viz = images[:num_samples] * std + mean
     future_gt_viz = future_images_gt[:num_samples] * std + mean
@@ -91,7 +108,12 @@ def visualize_future_prediction(
     future_gt_viz = torch.clamp(future_gt_viz, 0, 1)
     decoded_viz_resized = torch.clamp(decoded_viz_resized, 0, 1)
 
-    # Create visualization grid (current, GT future, predicted future)
+    # Get EE poses for rendering
+    pred_ee = predicted_ee_pose[:num_samples].cpu().numpy()  # [N, 7]
+    target_ee = target_ee_pose[:num_samples].cpu().numpy()    # [N, 7]
+    current_ee = current_ee_pose[:num_samples].cpu().numpy()  # [N, 7]
+
+    # Create visualization grid (current, GT future, predicted future, rendered future)
     wandb_images = []
     for i in range(num_samples):
         # Flip images vertically to correct orientation
@@ -99,22 +121,41 @@ def visualize_future_prediction(
         gt_img = np.flip(future_gt_viz[i].cpu().numpy().transpose(1, 2, 0), axis=0)
         pred_img = np.flip(decoded_viz_resized[i].cpu().numpy().transpose(1, 2, 0), axis=0)
 
+        # Compute position error
+        pos_error = np.linalg.norm(pred_ee[i, :3] - target_ee[i, :3])
+
+        # Current frame with current EE
         wandb_images.append(wandb.Image(
             current_img,
-            caption=f"Current (t)"
-        ))
-        wandb_images.append(wandb.Image(
-            gt_img,
-            caption=f"GT Future (t+1)"
-        ))
-        wandb_images.append(wandb.Image(
-            pred_img,
-            caption=f"Predicted Future (t+1)"
+            caption=f"Current (t) | EE: [{current_ee[i, 0]:.3f}, {current_ee[i, 1]:.3f}, {current_ee[i, 2]:.3f}]"
         ))
 
-    wandb.log({
-        "future_predictions": wandb_images,
-    }, step=step)
+        # GT future with GT EE
+        wandb_images.append(wandb.Image(
+            gt_img,
+            caption=f"GT Future (t+1) | EE: [{target_ee[i, 0]:.3f}, {target_ee[i, 1]:.3f}, {target_ee[i, 2]:.3f}]"
+        ))
+
+        # Predicted future (from latent)
+        wandb_images.append(wandb.Image(
+            pred_img,
+            caption=f"Predicted Visual (t+1)"
+        ))
+
+        # RENDERED FUTURE: Predicted image + predicted gripper (what model imagines!)
+        wandb_images.append(wandb.Image(
+            pred_img,
+            caption=f"🎯 Rendered Future | Pred EE: [{pred_ee[i, 0]:.3f}, {pred_ee[i, 1]:.3f}, {pred_ee[i, 2]:.3f}] | Err: {pos_error:.4f}"
+        ))
+
+    print(f"      Logging {len(wandb_images)} images to WandB at step {step}...")
+    try:
+        wandb.log({
+            "future_predictions": wandb_images,
+        }, step=step)
+        print(f"      ✓ Successfully logged to WandB")
+    except Exception as e:
+        print(f"      ✗ WandB logging failed: {e}")
 
 
 def log_ee_pose_predictions(
@@ -150,7 +191,12 @@ def log_ee_pose_predictions(
     log_dict['ee_pose_error/total_mse'] = (errors ** 2).mean().item()
     log_dict['ee_pose_error/total_mae'] = errors.abs().mean().item()
 
-    wandb.log(log_dict, step=step)
+    print(f"      Logging {len(log_dict)} EE pose metrics to WandB...")
+    try:
+        wandb.log(log_dict, step=step)
+        print(f"      ✓ Successfully logged EE metrics")
+    except Exception as e:
+        print(f"      ✗ WandB EE metrics logging failed: {e}")
 
 
 def train_epoch(
@@ -258,24 +304,32 @@ def train_epoch(
             # Visualize future predictions periodically
             if (batch_idx % vis_interval == 0) and (batch_idx > 0):
                 print(f"\n🎨 Creating visualizations at batch {batch_idx}, step {global_step}...")
+                print(f"   vis_interval={vis_interval}, batch_idx={batch_idx}, rank={rank}")
                 try:
                     with torch.no_grad():
-                        # Visualize future images (from V1)
+                        # Visualize future images + rendered gripper predictions (V3)
+                        print("   Calling visualize_future_prediction...")
                         visualize_future_prediction(
                             images=images,
                             future_images_gt=future_images,
                             decoded_future=outputs['decoded_future'],
+                            predicted_ee_pose=outputs['predicted_future_ee_pose'],
+                            target_ee_pose=outputs['target_future_ee_pose'],
+                            current_ee_pose=ee_pose,
                             step=global_step,
                             num_samples=4,
                         )
+                        print("   ✓ visualize_future_prediction completed")
 
-                        # Log EE pose predictions (from V2)
+                        # Log EE pose numerical metrics (from V2)
+                        print("   Calling log_ee_pose_predictions...")
                         log_ee_pose_predictions(
                             predicted_ee_pose=outputs['predicted_future_ee_pose'],
                             target_ee_pose=outputs['target_future_ee_pose'],
                             step=global_step,
                             num_samples=4,
                         )
+                        print("   ✓ log_ee_pose_predictions completed")
                     print(f"✓ Future images and EE pose logged to WandB")
                 except Exception as e:
                     print(f"✗ Visualization failed: {e}")
@@ -541,13 +595,21 @@ def main():
         writer = SummaryWriter(log_dir=os.path.join(output_dir, 'logs'))
 
         # Initialize WandB
-        wandb.init(
-            project="babel-vla-v3-train",
-            name=f"{config['data']['task_name'][:40]}_v3_{timestamp}",  # v1 suffix
-            config=config,
-            dir=output_dir,
-            tags=["v3.0", "future_image_and_pose"],
-        )
+        print("Initializing WandB...")
+        try:
+            wandb.init(
+                project="babel-vla-v3-train",
+                name=f"{config['data']['task_name'][:40]}_v3_{timestamp}",
+                config=config,
+                dir=output_dir,
+                tags=["v3.0", "future_image_and_pose"],
+            )
+            print(f"✓ WandB initialized successfully")
+            print(f"  Project: babel-vla-v3-train")
+            print(f"  Run URL: {wandb.run.get_url()}")
+        except Exception as e:
+            print(f"✗ WandB initialization failed: {e}")
+            print("  Continuing without WandB logging...")
 
     # Training loop
     if rank == 0:

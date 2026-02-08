@@ -11,27 +11,77 @@ from tqdm import tqdm
 import os
 import imageio
 
-from models import VLAModel
+from models import VLAModel, VLAModelV1, VLAModelV2, VLAModelV3
 from libero.libero import benchmark
 from libero.libero.envs import OffScreenRenderEnv
 
 
-def load_model(checkpoint_path: str, config_path: str, device: str = 'cuda'):
+def load_model(checkpoint_path: str, config_path: str, device: str = 'cuda', model_version: str = 'v2'):
     """Load trained VLA model"""
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 
-    model = VLAModel(
-        action_dim=config['model']['action_dim'],
-        proprio_dim=config['model']['proprio_dim'],
-        ee_dim=config['model']['ee_dim'],
-        hidden_dim=config['model']['hidden_dim'],
-        flow_hidden_dim=config['model']['flow_hidden_dim'],
-        flow_num_layers=config['model']['flow_num_layers'],
-        clip_model_name=config['model']['clip_model_name'],
-        freeze_vision=config['model']['freeze_vision'],
-        freeze_text=config['model']['freeze_text'],
-    )
+    # Select model class based on version
+    if model_version == 'v0':
+        model = VLAModel(
+            action_dim=config['model']['action_dim'],
+            proprio_dim=config['model']['proprio_dim'],
+            ee_dim=config['model']['ee_dim'],
+            hidden_dim=config['model']['hidden_dim'],
+            flow_hidden_dim=config['model']['flow_hidden_dim'],
+            flow_num_layers=config['model']['flow_num_layers'],
+            clip_model_name=config['model']['clip_model_name'],
+            freeze_vision=config['model']['freeze_vision'],
+            freeze_text=config['model']['freeze_text'],
+        )
+    elif model_version == 'v1':
+        model = VLAModelV1(
+            action_dim=config['model']['action_dim'],
+            proprio_dim=config['model']['proprio_dim'],
+            ee_dim=config['model']['ee_dim'],
+            hidden_dim=config['model']['hidden_dim'],
+            flow_hidden_dim=config['model']['flow_hidden_dim'],
+            flow_num_layers=config['model']['flow_num_layers'],
+            clip_model_name=config['model']['clip_model_name'],
+            freeze_vision=config['model']['freeze_vision'],
+            freeze_text=config['model']['freeze_text'],
+            future_hidden_dim=config['model']['future_hidden_dim'],
+            future_num_layers=config['model']['future_num_layers'],
+            decoder_output_size=config['model']['decoder_output_size'],
+        )
+    elif model_version == 'v2':
+        model = VLAModelV2(
+            action_dim=config['model']['action_dim'],
+            proprio_dim=config['model']['proprio_dim'],
+            ee_dim=config['model']['ee_dim'],
+            hidden_dim=config['model']['hidden_dim'],
+            flow_hidden_dim=config['model']['flow_hidden_dim'],
+            flow_num_layers=config['model']['flow_num_layers'],
+            clip_model_name=config['model']['clip_model_name'],
+            freeze_vision=config['model']['freeze_vision'],
+            freeze_text=config['model']['freeze_text'],
+            pose_predictor_hidden_dim=config['model']['pose_predictor_hidden_dim'],
+            pose_predictor_num_layers=config['model']['pose_predictor_num_layers'],
+        )
+    elif model_version == 'v3':
+        model = VLAModelV3(
+            action_dim=config['model']['action_dim'],
+            proprio_dim=config['model']['proprio_dim'],
+            ee_dim=config['model']['ee_dim'],
+            hidden_dim=config['model']['hidden_dim'],
+            flow_hidden_dim=config['model']['flow_hidden_dim'],
+            flow_num_layers=config['model']['flow_num_layers'],
+            clip_model_name=config['model']['clip_model_name'],
+            freeze_vision=config['model']['freeze_vision'],
+            freeze_text=config['model']['freeze_text'],
+            future_hidden_dim=config['model']['future_hidden_dim'],
+            future_num_layers=config['model']['future_num_layers'],
+            decoder_output_size=config['model']['decoder_output_size'],
+            pose_predictor_hidden_dim=config['model']['pose_predictor_hidden_dim'],
+            pose_predictor_num_layers=config['model']['pose_predictor_num_layers'],
+        )
+    else:
+        raise ValueError(f"Unknown model version: {model_version}")
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     state_dict = checkpoint['model_state_dict']
@@ -138,6 +188,8 @@ def record_rollout(
             # Fallback: use robot0_eye_in_hand if agentview not available
             frame = obs.get('robot0_eye_in_hand_image', np.zeros((256, 256, 3), dtype=np.uint8))
 
+        # Flip frame vertically (robosuite images are upside down)
+        frame = np.flipud(frame)
         frames.append(frame)
 
         # Preprocess observation
@@ -195,6 +247,8 @@ def main():
     parser.add_argument('--output-dir', type=str, default='./videos', help='Output directory for videos')
     parser.add_argument('--fps', type=int, default=20, help='Video FPS')
     parser.add_argument('--device', type=str, default='cuda', help='Device (cuda/cpu)')
+    parser.add_argument('--model-version', type=str, default='v2', choices=['v0', 'v1', 'v2', 'v3'],
+                        help='Model version to use (v0/v1/v2/v3)')
     args = parser.parse_args()
 
     # Create output directory
@@ -202,9 +256,9 @@ def main():
 
     # Load model
     print("="*80)
-    print("LOADING MODEL")
+    print(f"LOADING MODEL (Version: {args.model_version})")
     print("="*80)
-    model, config = load_model(args.checkpoint, args.config, args.device)
+    model, config = load_model(args.checkpoint, args.config, args.device, args.model_version)
 
     # Get task info from config
     task_name = config['data']['task_name']

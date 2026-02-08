@@ -31,7 +31,7 @@ data:
 training:
   # Hardware
   batch_size: 64  # Per GPU batch size (128 total with 2 GPUs)
-  num_epochs: 1000  # Overfit until perfect
+  num_epochs: 100000  # Overfit until perfect
 
   # Optimization
   learning_rate: 0.0003
@@ -41,10 +41,10 @@ training:
   # Logging and saving
   log_interval: 10  # Log every N batches
   vis_interval: 20  # Visualize future predictions every N batches (NEW in v1)
-  save_interval: 100  # Save checkpoint every N epochs
+  save_interval: 1000  # Save checkpoint every N epochs
   output_dir: "/data/user_data/ldahiya/outputs_v1/"
 
 # Inference configuration
 inference:
-  num_flow_steps: 50  # Number of sampling steps for rectified flow
+  num_flow_steps: 100  # Number of sampling steps for rectified flow
   batch_size: 1
